@@ -1,22 +1,17 @@
 ﻿Public Class Calculator
 
-    ' Track if keyboard input is active
-    Private keyboardActive As Boolean = False
+    ' Track if result was just shown
+    Private resultShown As Boolean = False
 
     ' ---------------------------
-    ' Full Screen & Not Adjustable
+    ' Form Setup
     ' ---------------------------
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
-        ' Allow maximize but disable manual resizing
         Me.FormBorderStyle = FormBorderStyle.FixedSingle
         Me.MaximizeBox = True
         Me.MinimizeBox = True
-
+        Me.KeyPreview = True ' Allow form to capture key presses
     End Sub
-
-
-
-
 
     ' ---------------------------
     ' DIGIT BUTTONS
@@ -25,9 +20,33 @@
         Button3.Click, Button4.Click, Button5.Click, Button6.Click, Button7.Click, Button8.Click, Button9.Click
 
         If txtDisplay.Text = "Error" Then Exit Sub
-        Dim btn As Button = CType(sender, Button)
-        txtDisplay.Text &= btn.Text
 
+        If resultShown Then
+            txtDisplay.Text = ""
+            resultShown = False
+        End If
+
+        Dim btn As Button = CType(sender, Button)
+        Dim digit As String = btn.Text
+
+        ' Prevent leading zero in new number segment
+        If digit = "0" Then
+            If txtDisplay.Text = "" Then Exit Sub
+
+            Dim lastOpIndex As Integer = txtDisplay.Text.LastIndexOfAny("+-*/".ToCharArray())
+            Dim currentSegment As String = If(lastOpIndex >= 0, txtDisplay.Text.Substring(lastOpIndex + 1), txtDisplay.Text)
+
+            If currentSegment = "0" Then Exit Sub
+        Else
+            ' If current segment is a single zero, replace it
+            Dim lastOpIndex As Integer = txtDisplay.Text.LastIndexOfAny("+-*/".ToCharArray())
+            Dim currentSegmentStart As Integer = If(lastOpIndex >= 0, lastOpIndex + 1, 0)
+            If txtDisplay.Text.Substring(currentSegmentStart) = "0" Then
+                txtDisplay.Text = txtDisplay.Text.Substring(0, currentSegmentStart)
+            End If
+        End If
+
+        txtDisplay.Text &= digit
         txtDisplay.Focus()
     End Sub
 
@@ -36,15 +55,19 @@
     ' ---------------------------
     Private Sub ButtonDot_Click(sender As Object, e As EventArgs) Handles dot.Click
         If txtDisplay.Text = "Error" Then Exit Sub
+
+        If resultShown Then
+            txtDisplay.Text = ""
+            resultShown = False
+        End If
+
         AddDecimal()
         txtDisplay.Focus()
     End Sub
 
     Private Sub AddDecimal()
-        ' Prevent multiple consecutive decimals
         If txtDisplay.Text.EndsWith(".") Then Exit Sub
 
-        ' Allow decimal only if current number doesn’t already have one
         If Not CurrentNumberHasDecimal() Then
             If txtDisplay.Text.Length = 0 OrElse "+-*/".Contains(txtDisplay.Text.Last()) Then
                 txtDisplay.Text &= "0."
@@ -64,8 +87,9 @@
     ' DELETE & CLEAR
     ' ---------------------------
     Private Sub ButtonDelete_Click(sender As Object, e As EventArgs) Handles ButtonDelete.Click
-        If txtDisplay.Text = "Error" Then
+        If txtDisplay.Text = "Error" OrElse resultShown Then
             txtDisplay.Text = ""
+            resultShown = False
         ElseIf txtDisplay.Text.Length > 0 Then
             txtDisplay.Text = txtDisplay.Text.Substring(0, txtDisplay.Text.Length - 1)
         End If
@@ -73,6 +97,7 @@
 
     Private Sub ButtonClear_Click(sender As Object, e As EventArgs) Handles CLEAR.Click
         txtDisplay.Text = ""
+        resultShown = False
     End Sub
 
     ' ---------------------------
@@ -99,6 +124,8 @@
     End Sub
 
     Private Sub AddOrReplaceOperator(op As String)
+        If resultShown Then resultShown = False
+
         If txtDisplay.Text.Length = 0 Then
             If op = "-" Then txtDisplay.Text &= op
             Return
@@ -119,7 +146,6 @@
             End If
 
         ElseIf lastChar = "."c Then
-            ' Prevent operator right after decimal → replace decimal with operator
             txtDisplay.Text = txtDisplay.Text.Substring(0, txtDisplay.Text.Length - 1) & op
 
         Else
@@ -137,47 +163,60 @@
 
             If Double.IsInfinity(value) OrElse Double.IsNaN(value) Then
                 txtDisplay.Text = "Error"
+                resultShown = False
                 Return
             End If
 
             If value = Math.Truncate(value) Then
-                txtDisplay.Text = value.ToString("0") ' whole number
+                txtDisplay.Text = value.ToString("0")
             Else
-                txtDisplay.Text = value.ToString("0.########") ' decimal
+                txtDisplay.Text = value.ToString("0.########")
             End If
+
+            resultShown = True
 
         Catch ex As Exception
             txtDisplay.Text = "Error"
+            resultShown = False
         End Try
     End Sub
 
     ' ---------------------------
     ' KEYBOARD HANDLING
     ' ---------------------------
-    ' Make sure you set Form1 property: KeyPreview = True
-
-    ' When user clicks the display, activate keyboard input
-    Private Sub txtDisplay_Click(sender As Object, e As EventArgs) Handles txtDisplay.Click
-        keyboardActive = True
-    End Sub
-
     Private Sub Form1_KeyPress(sender As Object, e As KeyPressEventArgs) Handles Me.KeyPress
-        If Not keyboardActive Then
-            e.Handled = True
-            Exit Sub
-        End If
-
         If txtDisplay.Text = "Error" Then
-            ' Only allow Backspace or Escape when Error is showing
             If e.KeyChar <> ChrW(8) AndAlso e.KeyChar <> ChrW(27) Then
                 e.Handled = True
                 Exit Sub
             End If
         End If
 
+        If resultShown AndAlso Char.IsDigit(e.KeyChar) Then
+            txtDisplay.Text = ""
+            resultShown = False
+        End If
+
         Select Case e.KeyChar
             Case "0"c To "9"c
-                txtDisplay.Text &= e.KeyChar
+                Dim digit As String = e.KeyChar.ToString()
+
+                If digit = "0" Then
+                    If txtDisplay.Text = "" Then Exit Sub
+
+                    Dim lastOpIndex As Integer = txtDisplay.Text.LastIndexOfAny("+-*/".ToCharArray())
+                    Dim currentSegment As String = If(lastOpIndex >= 0, txtDisplay.Text.Substring(lastOpIndex + 1), txtDisplay.Text)
+
+                    If currentSegment = "0" Then Exit Sub
+                Else
+                    Dim lastOpIndex As Integer = txtDisplay.Text.LastIndexOfAny("+-*/".ToCharArray())
+                    Dim currentSegmentStart As Integer = If(lastOpIndex >= 0, lastOpIndex + 1, 0)
+                    If txtDisplay.Text.Substring(currentSegmentStart) = "0" Then
+                        txtDisplay.Text = txtDisplay.Text.Substring(0, currentSegmentStart)
+                    End If
+                End If
+
+                txtDisplay.Text &= digit
 
             Case "."c
                 If Not CurrentNumberHasDecimal() Then
@@ -187,7 +226,7 @@
             Case "+"c, "-"c, "*"c, "/"c
                 AddOrReplaceOperator(e.KeyChar)
 
-            Case ChrW(13)   ' Enter key
+            Case ChrW(13)   ' Enter
                 e.Handled = True
                 Equal_Click(Nothing, Nothing)
 
@@ -198,12 +237,11 @@
                 ButtonClear_Click(Nothing, Nothing)
 
             Case Else
-                ' Ignore everything else
                 e.Handled = True
         End Select
     End Sub
 
+    Private Sub txtDisplay_Click(sender As Object, e As EventArgs) Handles txtDisplay.Click
 
-
-
+    End Sub
 End Class
